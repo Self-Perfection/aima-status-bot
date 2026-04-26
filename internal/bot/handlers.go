@@ -1,0 +1,92 @@
+package bot
+
+import (
+	"github.com/mymmrac/telego"
+	th "github.com/mymmrac/telego/telegohandler"
+	tu "github.com/mymmrac/telego/telegoutil"
+)
+
+const disclaimerText = `🔔 AIMA Renew Watch Bot
+
+Я мониторю страницы Validação на portal-renovacoes.aima.gov.pt и присылаю сообщение, когда меняется числовой статус заявки на ВНЖ.
+
+⚠️ Важно про приватность.
+URL страницы Validação — это credential. По нему открывается ваша персональная информация: имя, NIF, NISS, NIE, адрес, email, тип заявки. Когда вы подписываете URL на мониторинг, оператор бота (Self-Perfection) и сервер, на котором бот работает, технически имеют доступ к этим данным.
+
+Что бот делает:
+• хранит URL зашифрованным в БД
+• никогда не логирует URL и тело ответов AIMA
+• сохраняет только числовой статус (1, 5, 11, 14, 15, 20, 6)
+• автоматически снимает с мониторинга при статусе 6 (Aprovado)
+• /forget_me удаляет все ваши данные мгновенно
+
+Лимит: 4 подписки на одного пользователя.
+
+Исходный код: https://github.com/Self-Perfection/aima-renew-watch-bot
+
+Если согласны — отправьте /agree`
+
+const helpText = `Команды:
+/start — приветствие и дисклеймер
+/agree — подтвердить согласие на обработку данных
+/add <url> [имя] — подписаться на мониторинг (после /agree)
+/list — мои подписки
+/remove <id> — отписаться
+/forget_me — удалить все мои данные
+/help — это сообщение`
+
+func (b *Bot) handleStart(ctx *th.Context, msg telego.Message) error {
+	return b.send(ctx, msg.Chat.ID, disclaimerText)
+}
+
+func (b *Bot) handleHelp(ctx *th.Context, msg telego.Message) error {
+	return b.send(ctx, msg.Chat.ID, helpText)
+}
+
+func (b *Bot) handleAgree(ctx *th.Context, msg telego.Message) error {
+	if err := b.store.SetAgreed(ctx, msg.Chat.ID); err != nil {
+		return b.send(ctx, msg.Chat.ID, "Не удалось сохранить согласие. Попробуйте позже.")
+	}
+	return b.send(ctx, msg.Chat.ID, "✓ Согласие записано. Используйте /add <url> [имя], чтобы подписаться. /help — список команд.")
+}
+
+func (b *Bot) handleAdd(ctx *th.Context, msg telego.Message) error {
+	if ok, err := b.requireConsent(ctx, msg.Chat.ID); !ok {
+		return err
+	}
+	return b.send(ctx, msg.Chat.ID, "Команда /add ещё не реализована.")
+}
+
+func (b *Bot) handleList(ctx *th.Context, msg telego.Message) error {
+	if ok, err := b.requireConsent(ctx, msg.Chat.ID); !ok {
+		return err
+	}
+	return b.send(ctx, msg.Chat.ID, "Команда /list ещё не реализована.")
+}
+
+func (b *Bot) handleRemove(ctx *th.Context, msg telego.Message) error {
+	if ok, err := b.requireConsent(ctx, msg.Chat.ID); !ok {
+		return err
+	}
+	return b.send(ctx, msg.Chat.ID, "Команда /remove ещё не реализована.")
+}
+
+func (b *Bot) handleForgetMe(ctx *th.Context, msg telego.Message) error {
+	return b.send(ctx, msg.Chat.ID, "Команда /forget_me ещё не реализована.")
+}
+
+func (b *Bot) requireConsent(ctx *th.Context, chatID int64) (bool, error) {
+	agreed, err := b.store.IsAgreed(ctx, chatID)
+	if err != nil {
+		return false, b.send(ctx, chatID, "Внутренняя ошибка. Попробуйте позже.")
+	}
+	if !agreed {
+		return false, b.send(ctx, chatID, "Сначала прочтите /start и подтвердите /agree.")
+	}
+	return true, nil
+}
+
+func (b *Bot) send(ctx *th.Context, chatID int64, text string) error {
+	_, err := ctx.Bot().SendMessage(ctx, tu.Message(tu.ID(chatID), text))
+	return err
+}

@@ -1,0 +1,15 @@
+# Build artifacts
+/bin/
+/aima-renew-watch-bot
+
+# Local config / runtime
+.env
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Editor
+.idea/
+.vscode/
+*.swp
