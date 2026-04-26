@@ -27,8 +27,11 @@ type Fetcher struct {
 
 func NewFetcher() *Fetcher {
 	return &Fetcher{
-		client: &http.Client{Timeout: DefaultTimeout},
-		ua:     "aima-renew-watch-bot (+https://github.com/Self-Perfection/aima-renew-watch-bot)",
+		client: &http.Client{
+			Timeout:   DefaultTimeout,
+			Transport: newTLSTransport(DefaultTimeout),
+		},
+		ua: "aima-renew-watch-bot (+https://github.com/Self-Perfection/aima-renew-watch-bot)",
 	}
 }
 
