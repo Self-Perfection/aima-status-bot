@@ -7,20 +7,25 @@ import (
 	"github.com/mymmrac/telego"
 	th "github.com/mymmrac/telego/telegohandler"
 
+	"github.com/Self-Perfection/aima-renew-watch-bot/internal/aima"
 	"github.com/Self-Perfection/aima-renew-watch-bot/internal/store"
 )
 
+const MaxSubscriptionsPerUser = 4
+
 type Bot struct {
-	api   *telego.Bot
-	store *store.Store
+	api     *telego.Bot
+	store   *store.Store
+	fetcher *aima.Fetcher
+	encKey  []byte
 }
 
-func New(token string, st *store.Store) (*Bot, error) {
+func New(token string, st *store.Store, fetcher *aima.Fetcher, encKey []byte) (*Bot, error) {
 	api, err := telego.NewBot(token)
 	if err != nil {
 		return nil, fmt.Errorf("telego.NewBot: %w", err)
 	}
-	return &Bot{api: api, store: st}, nil
+	return &Bot{api: api, store: st, fetcher: fetcher, encKey: encKey}, nil
 }
 
 func (b *Bot) Run(ctx context.Context) error {

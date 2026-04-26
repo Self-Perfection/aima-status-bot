@@ -1,9 +1,18 @@
 package bot
 
 import (
+	"errors"
+	"fmt"
+	"log/slog"
+	"strings"
+
 	"github.com/mymmrac/telego"
 	th "github.com/mymmrac/telego/telegohandler"
 	tu "github.com/mymmrac/telego/telegoutil"
+
+	"github.com/Self-Perfection/aima-renew-watch-bot/internal/aima"
+	"github.com/Self-Perfection/aima-renew-watch-bot/internal/crypto"
+	"github.com/Self-Perfection/aima-renew-watch-bot/internal/store"
 )
 
 const disclaimerText = `🔔 AIMA Renew Watch Bot
@@ -54,7 +63,69 @@ func (b *Bot) handleAdd(ctx *th.Context, msg telego.Message) error {
 	if ok, err := b.requireConsent(ctx, msg.Chat.ID); !ok {
 		return err
 	}
-	return b.send(ctx, msg.Chat.ID, "Команда /add ещё не реализована.")
+	parts := strings.Fields(msg.Text)
+	if len(parts) < 2 {
+		return b.send(ctx, msg.Chat.ID,
+			"Использование: /add <url> [имя]\n"+
+				"Например: /add https://portal-renovacoes.aima.gov.pt/ords/r/aima/aima-pr/validar?... я")
+	}
+	rawURL := parts[1]
+	var nickname string
+	if len(parts) >= 3 {
+		nickname = strings.TrimSpace(strings.Join(parts[2:], " "))
+	}
+
+	if !aima.IsValidacaoURL(rawURL) {
+		return b.send(ctx, msg.Chat.ID,
+			"URL не похож на страницу Validação. Ожидается "+
+				"https://portal-renovacoes.aima.gov.pt/ords/r/aima/aima-pr/validar?...")
+	}
+	canonical, hash, err := aima.NormalizeURL(rawURL)
+	if err != nil {
+		return b.send(ctx, msg.Chat.ID, "URL не парсится: "+err.Error())
+	}
+
+	count, err := b.store.CountSubscriptions(ctx, msg.Chat.ID)
+	if err != nil {
+		slog.Error("count subscriptions", "err", err)
+		return b.send(ctx, msg.Chat.ID, "Внутренняя ошибка.")
+	}
+	if count >= MaxSubscriptionsPerUser {
+		return b.send(ctx, msg.Chat.ID,
+			fmt.Sprintf("У вас уже %d подписок (лимит). Сначала /remove.", MaxSubscriptionsPerUser))
+	}
+
+	status, err := b.fetcher.FetchStatus(ctx, canonical)
+	if err != nil {
+		if errors.Is(err, aima.ErrStatusNotFound) {
+			return b.send(ctx, msg.Chat.ID,
+				"На странице не нашёлся индикатор статуса. Возможно, токен в URL уже не работает.")
+		}
+		return b.send(ctx, msg.Chat.ID, "Не удалось загрузить страницу: "+err.Error())
+	}
+
+	encrypted, err := crypto.Encrypt([]byte(canonical), b.encKey)
+	if err != nil {
+		slog.Error("encrypt url", "err", err)
+		return b.send(ctx, msg.Chat.ID, "Внутренняя ошибка.")
+	}
+
+	subID, err := b.store.AddSubscription(ctx, msg.Chat.ID, encrypted, hash, nickname, status)
+	if err != nil {
+		if errors.Is(err, store.ErrAlreadySubscribed) {
+			return b.send(ctx, msg.Chat.ID, "Вы уже подписаны на этот URL.")
+		}
+		slog.Error("add subscription", "err", err)
+		return b.send(ctx, msg.Chat.ID, "Не удалось сохранить.")
+	}
+
+	name := nickname
+	if name == "" {
+		name = fmt.Sprintf("#%d", subID)
+	}
+	return b.send(ctx, msg.Chat.ID,
+		fmt.Sprintf("✓ Подписка %s добавлена.\nТекущий статус: %d (%s)",
+			name, status, aima.Label(status)))
 }
 
 func (b *Bot) handleList(ctx *th.Context, msg telego.Message) error {

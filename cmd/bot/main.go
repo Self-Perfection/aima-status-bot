@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/Self-Perfection/aima-renew-watch-bot/internal/aima"
 	"github.com/Self-Perfection/aima-renew-watch-bot/internal/bot"
 	"github.com/Self-Perfection/aima-renew-watch-bot/internal/config"
 	"github.com/Self-Perfection/aima-renew-watch-bot/internal/healthcheck"
@@ -30,7 +31,7 @@ func main() {
 	}
 	defer st.Close()
 
-	b, err := bot.New(cfg.BotToken, st)
+	b, err := bot.New(cfg.BotToken, st, aima.NewFetcher(), cfg.EncKey)
 	if err != nil {
 		logger.Error("init bot", "err", err)
 		os.Exit(1)
