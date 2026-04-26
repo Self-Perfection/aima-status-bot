@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 )
 
@@ -61,6 +62,25 @@ func TestFetchStatus_NonNumeric(t *testing.T) {
 	}
 	if errors.Is(err, ErrStatusNotFound) {
 		t.Errorf("got ErrStatusNotFound, want parse error")
+	}
+}
+
+// TestFetchStatus_Fixture проверяет парсинг реального HTML, скачанного
+// curl'ом со страницы AIMA Validação. Файл лежит в ../../fixtures/validar.
+func TestFetchStatus_Fixture(t *testing.T) {
+	data, err := os.ReadFile("../../fixtures/validar")
+	if err != nil {
+		t.Skip("fixture not found:", err)
+	}
+	srv := newServer(t, 200, string(data))
+	defer srv.Close()
+
+	got, err := NewFetcher().FetchStatus(context.Background(), srv.URL)
+	if err != nil {
+		t.Fatalf("FetchStatus error: %v", err)
+	}
+	if got != 5 {
+		t.Errorf("status = %d, want 5", got)
 	}
 }
 

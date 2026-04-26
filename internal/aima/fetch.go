@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/http/cookiejar"
 	"regexp"
 	"strconv"
 	"strings"
@@ -33,10 +34,15 @@ type Fetcher struct {
 }
 
 func NewFetcher() *Fetcher {
+	// CookieJar нужен: APEX при первом запросе ставит сессионную куку и
+	// редиректит. Без jar Go следует редиректу без куки и получает пустую
+	// форму вместо страницы со статусом.
+	jar, _ := cookiejar.New(nil)
 	return &Fetcher{
 		client: &http.Client{
 			Timeout:   DefaultTimeout,
 			Transport: newTLSTransport(DefaultTimeout),
+			Jar:       jar,
 		},
 		ua: "aima-renew-watch-bot (+https://github.com/Self-Perfection/aima-renew-watch-bot)",
 	}
