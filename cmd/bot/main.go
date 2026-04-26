@@ -11,6 +11,7 @@ import (
 	"github.com/Self-Perfection/aima-renew-watch-bot/internal/bot"
 	"github.com/Self-Perfection/aima-renew-watch-bot/internal/config"
 	"github.com/Self-Perfection/aima-renew-watch-bot/internal/healthcheck"
+	"github.com/Self-Perfection/aima-renew-watch-bot/internal/monitor"
 	"github.com/Self-Perfection/aima-renew-watch-bot/internal/store"
 )
 
@@ -31,7 +32,8 @@ func main() {
 	}
 	defer st.Close()
 
-	b, err := bot.New(cfg.BotToken, st, aima.NewFetcher(), cfg.EncKey)
+	fetcher := aima.NewFetcher()
+	b, err := bot.New(cfg.BotToken, st, fetcher, cfg.EncKey)
 	if err != nil {
 		logger.Error("init bot", "err", err)
 		os.Exit(1)
@@ -41,6 +43,7 @@ func main() {
 	defer cancel()
 
 	go healthcheck.Run(ctx, cfg.HealthcheckURL, cfg.HealthcheckEvery)
+	go monitor.New(st, fetcher, b, cfg.EncKey, 0, 0).Run(ctx)
 
 	if err := b.Run(ctx); err != nil {
 		logger.Error("bot exited", "err", err)
