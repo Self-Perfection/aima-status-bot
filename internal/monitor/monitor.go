@@ -72,12 +72,18 @@ func (m *Monitor) step(ctx context.Context) error {
 		return err
 	}
 	if due == nil {
-		return nil
+		return nil // idle, не шумим в логах
+	}
+
+	overdue, err := m.store.CountOverdueURLs(ctx, m.minAge)
+	if err != nil {
+		// не критично, не валим step — просто 0 в логе
+		overdue = 0
 	}
 
 	rawURL, err := crypto.Decrypt(due.EncryptedURL, m.encKey)
 	if err != nil {
-		slog.Error("decrypt failed", "url_id", due.ID, "err", err)
+		slog.Error("monitor: decrypt failed", "url_id", due.ID, "err", err)
 		return err
 	}
 
@@ -85,10 +91,11 @@ func (m *Monitor) step(ctx context.Context) error {
 	if err != nil {
 		n, recErr := m.store.MarkFetchFailed(ctx, due.ID)
 		if recErr != nil {
-			slog.Error("mark fetch failed", "url_id", due.ID, "err", recErr)
+			slog.Error("monitor: mark fetch failed", "url_id", due.ID, "err", recErr)
 		}
-		// Не логируем сам URL — только id и причину.
-		slog.Warn("fetch failed", "url_id", due.ID, "fail_count", n, "err", err)
+		// Никогда не логируем сам URL — только id и причину.
+		slog.Warn("monitor: fetch failed",
+			"url_id", due.ID, "fail_count", n, "overdue", overdue-1, "err", err)
 		if n >= FailThreshold {
 			m.handleDead(ctx, due.ID, n)
 		}
@@ -96,7 +103,12 @@ func (m *Monitor) step(ctx context.Context) error {
 	}
 
 	if due.LastStatus != nil && *due.LastStatus == status {
-		return m.store.MarkFetchedNoChange(ctx, due.ID)
+		if err := m.store.MarkFetchedNoChange(ctx, due.ID); err != nil {
+			return err
+		}
+		slog.Info("monitor: fetched (no change)",
+			"url_id", due.ID, "status", status, "overdue", overdue-1)
+		return nil
 	}
 
 	if err := m.store.RecordStatus(ctx, due.ID, status); err != nil {
@@ -109,13 +121,23 @@ func (m *Monitor) step(ctx context.Context) error {
 	}
 
 	if status == aima.StatusApproved {
+		slog.Info("monitor: approved (auto-removing)",
+			"url_id", due.ID, "subscribers", len(subs), "overdue", overdue-1)
 		m.handleApproved(ctx, due.ID, subs)
 		return nil
 	}
 
+	from := 0
+	if due.LastStatus != nil {
+		from = *due.LastStatus
+	}
+	slog.Info("monitor: status changed",
+		"url_id", due.ID, "from", from, "to", status,
+		"subscribers", len(subs), "overdue", overdue-1)
+
 	for _, s := range subs {
 		if err := m.notifier.NotifyStatusChange(ctx, s.ChatID, s.SubID, s.Nickname, due.LastStatus, status); err != nil {
-			slog.Warn("notify failed", "chat_id", s.ChatID, "err", err)
+			slog.Warn("monitor: notify failed", "chat_id", s.ChatID, "err", err)
 		}
 	}
 	return nil

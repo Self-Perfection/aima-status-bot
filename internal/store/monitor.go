@@ -15,6 +15,18 @@ type DueURL struct {
 	LastStatus   *int
 }
 
+// CountOverdueURLs возвращает число URL, у которых last_fetched_at
+// старше now-minAge (или NULL). Используется monitor'ом как метрика
+// «глубина очереди» — если растёт, пора ускорять тик.
+func (s *Store) CountOverdueURLs(ctx context.Context, minAge time.Duration) (int, error) {
+	cutoff := time.Now().Add(-minAge).Unix()
+	var n int
+	err := s.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM monitored_urls
+		 WHERE last_fetched_at IS NULL OR last_fetched_at < ?`, cutoff).Scan(&n)
+	return n, err
+}
+
 // PickDueURL возвращает URL с самой давней проверкой, но только если
 // его last_fetched_at старше now-minAge (или NULL). Если подходящих
 // нет — (nil, nil).
