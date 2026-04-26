@@ -16,10 +16,15 @@ type Store struct {
 }
 
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)")
+	db, err := sql.Open("sqlite", path+
+		"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
+	// Одно соединение: SQLite допускает только одного concurrent writer'а,
+	// а пул соединений приводит к SQLITE_BUSY когда монитор и handler пишут
+	// одновременно. busy_timeout — дополнительная страховка.
+	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(schemaSQL); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
