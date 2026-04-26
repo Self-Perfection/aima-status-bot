@@ -23,9 +23,12 @@ func TestIsValidacaoURL(t *testing.T) {
 	}
 }
 
-func TestNormalizeURL_DeterministicAcrossOrder(t *testing.T) {
-	a := "https://portal-renovacoes.aima.gov.pt/ords/r/aima/aima-pr/validar?p71_lang=pt&token=abc"
-	b := "https://portal-renovacoes.aima.gov.pt/ords/r/aima/aima-pr/validar?token=abc&p71_lang=pt"
+// Порядок query-параметров НЕ нормализуется: APEX привязывает checksum
+// (cs=...) к конкретному порядку. Один и тот же токен с переставленными
+// параметрами — это другой URL с другим hash.
+func TestNormalizeURL_PreservesParamOrder(t *testing.T) {
+	a := "https://portal-renovacoes.aima.gov.pt/ords/r/aima/aima-pr/validar?p71_lang=pt&p72_token=abc&cs=XYZ"
+	b := "https://portal-renovacoes.aima.gov.pt/ords/r/aima/aima-pr/validar?p72_token=abc&p71_lang=pt&cs=XYZ"
 	canA, hashA, err := NormalizeURL(a)
 	if err != nil {
 		t.Fatal(err)
@@ -34,11 +37,12 @@ func TestNormalizeURL_DeterministicAcrossOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if canA != canB {
-		t.Errorf("canonical mismatch:\n%s\n%s", canA, canB)
+	// Разный порядок → разные canonical и hash (cs привязан к порядку).
+	if canA == canB {
+		t.Errorf("expected different canonical for different param order, got same: %s", canA)
 	}
-	if hashA != hashB {
-		t.Errorf("hash mismatch: %s vs %s", hashA, hashB)
+	if hashA == hashB {
+		t.Errorf("expected different hash for different param order, got same")
 	}
 }
 

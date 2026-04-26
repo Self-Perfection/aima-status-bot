@@ -30,8 +30,10 @@ func IsValidacaoURL(raw string) bool {
 }
 
 // NormalizeURL приводит URL к каноническому виду для дедупа: lowercase
-// scheme/host, drop fragment, sort query-params (url.Values.Encode
-// сортирует по ключу). Возвращает каноничный URL и его SHA-256 hex.
+// scheme/host, drop fragment. Порядок query-параметров НЕ меняется —
+// APEX использует параметр cs (checksum), привязанный к конкретному
+// порядку параметров; сортировка сломала бы чексумму и запрос.
+// Возвращает каноничный URL и его SHA-256 hex.
 func NormalizeURL(raw string) (canonical, hash string, err error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
@@ -43,7 +45,7 @@ func NormalizeURL(raw string) (canonical, hash string, err error) {
 	u.Scheme = strings.ToLower(u.Scheme)
 	u.Host = strings.ToLower(u.Host)
 	u.Fragment = ""
-	u.RawQuery = u.Query().Encode()
+	// RawQuery оставляем как есть — порядок параметров важен для cs.
 	canonical = u.String()
 	sum := sha256.Sum256([]byte(canonical))
 	hash = hex.EncodeToString(sum[:])
