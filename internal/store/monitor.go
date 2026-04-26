@@ -110,6 +110,42 @@ type SubscriberInfo struct {
 	Nickname string
 }
 
+// StatusEntry — одна точка журнала статусов URL.
+type StatusEntry struct {
+	Status     int
+	ObservedAt time.Time
+}
+
+func (s *Store) StatusHistory(ctx context.Context, urlID int64) ([]StatusEntry, error) {
+	rows, err := s.DB.QueryContext(ctx,
+		`SELECT status, observed_at FROM status_history
+		 WHERE monitored_url_id = ? ORDER BY observed_at`, urlID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []StatusEntry
+	for rows.Next() {
+		var (
+			status     int
+			observedAt int64
+		)
+		if err := rows.Scan(&status, &observedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, StatusEntry{Status: status, ObservedAt: time.Unix(observedAt, 0)})
+	}
+	return out, rows.Err()
+}
+
+// RemoveURL удаляет monitored_urls и каскадом — subscriptions и
+// status_history. Используется monitor'ом при одобрении и при
+// исчерпании лимита неудачных fetch'ей.
+func (s *Store) RemoveURL(ctx context.Context, urlID int64) error {
+	_, err := s.DB.ExecContext(ctx, `DELETE FROM monitored_urls WHERE id = ?`, urlID)
+	return err
+}
+
 func (s *Store) Subscribers(ctx context.Context, urlID int64) ([]SubscriberInfo, error) {
 	rows, err := s.DB.QueryContext(ctx,
 		`SELECT chat_id, id, nickname FROM subscriptions WHERE monitored_url_id = ?`, urlID)
