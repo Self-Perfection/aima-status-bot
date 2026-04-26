@@ -58,8 +58,11 @@ URL страницы Validação — это credential. По нему откры
 ### Сборка
 
 ```sh
-go build -o aima-renew-watch-bot ./cmd/bot
+make build           # под текущую платформу
+make build-linux     # кросс-сборка под Linux/amd64 (для деплоя)
 ```
+
+(или вручную: `go build -o aima-renew-watch-bot ./cmd/bot`)
 
 Бинарь самодостаточный: `modernc.org/sqlite` — pure-Go, CGO не нужен.
 
@@ -98,7 +101,7 @@ install -d -o aima-bot -g aima-bot -m 700 /var/lib/aima-renew-watch-bot
 На dev-машине (cross-compile под Linux/amd64 — CGO бот не использует):
 
 ```sh
-GOOS=linux GOARCH=amd64 go build -o aima-renew-watch-bot ./cmd/bot
+make build-linux
 scp aima-renew-watch-bot user@server:/tmp/
 ```
 
@@ -177,7 +180,7 @@ journalctl -u aima-renew-watch-bot -f
 ### 5. Обновление
 
 ```sh
-GOOS=linux GOARCH=amd64 go build -o aima-renew-watch-bot ./cmd/bot
+make build-linux
 scp aima-renew-watch-bot user@server:/tmp/
 ssh user@server '
   install -m 755 /tmp/aima-renew-watch-bot /usr/local/bin/ &&
