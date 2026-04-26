@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mymmrac/telego"
 	th "github.com/mymmrac/telego/telegohandler"
@@ -132,18 +134,68 @@ func (b *Bot) handleList(ctx *th.Context, msg telego.Message) error {
 	if ok, err := b.requireConsent(ctx, msg.Chat.ID); !ok {
 		return err
 	}
-	return b.send(ctx, msg.Chat.ID, "Команда /list ещё не реализована.")
+	subs, err := b.store.ListSubscriptions(ctx, msg.Chat.ID)
+	if err != nil {
+		slog.Error("list subscriptions", "err", err)
+		return b.send(ctx, msg.Chat.ID, "Внутренняя ошибка.")
+	}
+	if len(subs) == 0 {
+		return b.send(ctx, msg.Chat.ID, "У вас нет подписок. Используйте /add <url> [имя].")
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Ваши подписки:\n")
+	for _, s := range subs {
+		name := s.Nickname
+		if name == "" {
+			name = fmt.Sprintf("#%d", s.ID)
+		}
+		fmt.Fprintf(&sb, "• %d — %s — ", s.ID, name)
+		if s.LastStatus != nil {
+			fmt.Fprintf(&sb, "статус %d (%s)", *s.LastStatus, aima.Label(*s.LastStatus))
+			if s.LastFetched != nil {
+				fmt.Fprintf(&sb, ", обновлено %s назад",
+					time.Since(*s.LastFetched).Round(time.Minute))
+			}
+		} else {
+			sb.WriteString("ещё не проверен")
+		}
+		sb.WriteString("\n")
+	}
+	sb.WriteString("\n/remove <id> — отписаться")
+	return b.send(ctx, msg.Chat.ID, sb.String())
 }
 
 func (b *Bot) handleRemove(ctx *th.Context, msg telego.Message) error {
 	if ok, err := b.requireConsent(ctx, msg.Chat.ID); !ok {
 		return err
 	}
-	return b.send(ctx, msg.Chat.ID, "Команда /remove ещё не реализована.")
+	parts := strings.Fields(msg.Text)
+	if len(parts) < 2 {
+		return b.send(ctx, msg.Chat.ID, "Использование: /remove <id>\n/list — посмотреть id своих подписок")
+	}
+	subID, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return b.send(ctx, msg.Chat.ID, "id должен быть числом. /list — посмотреть id своих подписок")
+	}
+
+	removed, err := b.store.RemoveSubscription(ctx, msg.Chat.ID, subID)
+	if err != nil {
+		slog.Error("remove subscription", "err", err, "sub_id", subID)
+		return b.send(ctx, msg.Chat.ID, "Внутренняя ошибка.")
+	}
+	if !removed {
+		return b.send(ctx, msg.Chat.ID, "Подписка с таким id не найдена.")
+	}
+	return b.send(ctx, msg.Chat.ID, "✓ Подписка снята.")
 }
 
 func (b *Bot) handleForgetMe(ctx *th.Context, msg telego.Message) error {
-	return b.send(ctx, msg.Chat.ID, "Команда /forget_me ещё не реализована.")
+	if err := b.store.ForgetUser(ctx, msg.Chat.ID); err != nil {
+		slog.Error("forget user", "err", err)
+		return b.send(ctx, msg.Chat.ID, "Внутренняя ошибка.")
+	}
+	return b.send(ctx, msg.Chat.ID, "✓ Все ваши данные удалены. Если захотите вернуться — /start.")
 }
 
 func (b *Bot) requireConsent(ctx *th.Context, chatID int64) (bool, error) {
