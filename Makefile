@@ -8,8 +8,9 @@ build:
 	go build -o $(BINARY) $(PKG)
 
 # Кросс-сборка под Linux/amd64 для деплоя на сервер.
+# CGO_ENABLED=0 даёт полностью статический бинарь — не зависит от версии glibc.
 build-linux:
-	GOOS=linux GOARCH=amd64 go build -o $(BINARY) $(PKG)
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o $(BINARY) $(PKG)
 
 test:
 	go test ./...

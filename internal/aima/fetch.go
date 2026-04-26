@@ -1,9 +1,11 @@
 package aima
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
@@ -62,22 +64,35 @@ func (f *Fetcher) FetchStatus(ctx context.Context, url string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("http %d", resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return 0, fmt.Errorf("read body: %w", err)
 	}
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("http %d (body %d bytes)", resp.StatusCode, len(body))
+	}
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
 	if err != nil {
 		return 0, fmt.Errorf("parse html: %w", err)
 	}
 
 	val, ok := extractEstado(doc)
 	if !ok {
-		// Элемент не нашёлся — логируем title для диагностики (не-PII).
+		// Элемент не нашёлся — логируем title и размер для диагностики (не-PII).
 		title := strings.TrimSpace(doc.Find("title").First().Text())
-		slog.Warn("aima: estado element not found",
-			"page_title", title,
-			"final_url", resp.Request.URL.Host+resp.Request.URL.Path)
+		if isGeoblock(body) {
+			slog.Warn("aima: geo-blocked — server is not in Portugal",
+				"http_status", resp.StatusCode,
+				"body_bytes", len(body),
+				"final_url", resp.Request.URL.Host+resp.Request.URL.Path)
+		} else {
+			slog.Warn("aima: estado element not found",
+				"page_title", title,
+				"http_status", resp.StatusCode,
+				"body_bytes", len(body),
+				"final_url", resp.Request.URL.Host+resp.Request.URL.Path)
+		}
 		return 0, ErrStatusNotFound
 	}
 
@@ -110,6 +125,12 @@ func extractEstado(doc *goquery.Document) (string, bool) {
 		}
 	})
 	return result, found
+}
+
+// isGeoblock возвращает true, если тело ответа содержит признак
+// геоблокировки AIMA («доступ только из Португалии»).
+func isGeoblock(body []byte) bool {
+	return bytes.Contains(body, []byte("Acesso permitido apenas em Portugal"))
 }
 
 func readEstadoAttr(s *goquery.Selection) (string, bool) {

@@ -59,12 +59,21 @@ URL страницы Validação — это credential. По нему откры
 
 ```sh
 make build           # под текущую платформу
-make build-linux     # кросс-сборка под Linux/amd64 (для деплоя)
+make build-linux     # статический бинарь Linux/amd64 (для деплоя)
 ```
 
-(или вручную: `go build -o aima-renew-watch-bot ./cmd/bot`)
+(или вручную: `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o aima-renew-watch-bot ./cmd/bot`)
 
-Бинарь самодостаточный: `modernc.org/sqlite` — pure-Go, CGO не нужен.
+`CGO_ENABLED=0` даёт полностью статический бинарь: не требует конкретной версии
+glibc и работает на любом Linux x86-64, включая старые дистрибутивы.
+`modernc.org/sqlite` — pure-Go, так что CGO не нужен нигде.
+
+### Требование: сервер в Португалии
+
+AIMA геоблокирует запросы не из Португалии: при обращении с нероссийского/
+не-португальского IP возвращается страница
+`"Acesso permitido apenas em Portugal."`.
+Бот должен работать на сервере с португальским IP-адресом.
 
 ### Запуск
 
